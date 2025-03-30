@@ -1,0 +1,52 @@
+MODEL:
+  META_ARCHITECTURE: "GeneralizedRCNN"
+  BACKBONE:
+    NAME: "build_trident_resnet_backbone"
+  ROI_HEADS:
+    NAME: "TridentRes5ROIHeads"
+    POSITIVE_FRACTION: 0.5
+    BATCH_SIZE_PER_IMAGE: 128
+    PROPOSAL_APPEND_GT: False
+  PROPOSAL_GENERATOR:
+    NAME: "TridentRPN"
+  RPN:
+    POST_NMS_TOPK_TRAIN: 500
+  TRIDENT:
+    NUM_BRANCH: 3
+    BRANCH_DILATIONS: [1, 2, 3]
+    TEST_BRANCH_IDX: 1
+    TRIDENT_STAGE: "res4"
+  WEIGHTS: "./logs/step_obj_dect/model_final.pth" 
+DATASETS:
+  TRAIN: ("qk_dataset_train",)
+  TEST: ("qk_dataset_val",)
+GLOBAL:
+  HACK: 1.0
+OUTPUT_DIR: ./logs/step_obj_dect/
+SEED: -1
+SOLVER:
+  LR_SCHEDULER_NAME: "WarmupMultiStepLR"
+  MAX_ITER: 7500
+  BASE_LR: 1.6e-4
+  LR: 1e-4
+  BETAS: (0.9, 0.999)
+  MOMENTUM: 0.009
+  NESTEROV: True
+  GAMMA: 0.1
+  # Save a checkpoint after every this number of iterations
+  CHECKPOINT_PERIOD: 10000
+  IMS_PER_BATCH: 3
+  REFERENCE_WORLD_SIZE: 0
+  CLIP_GRADIENTS: 
+    "ENABLED": false
+    CLIP_TYPE: "value"
+    CLIP_VALUE: 1.0 
+  WEIGHT_DECAY: 0.1
+  # The weight decay that's applied to parameters of normalization layers
+  # (typically the affine transformation)
+  WEIGHT_DECAY_NORM: 0.0001  
+TEST:
+  EVAL_PERIOD: 2500
+INPUT:
+  MIN_SIZE_TRAIN: (640, 672, 704, 736, 768, 800)
+
