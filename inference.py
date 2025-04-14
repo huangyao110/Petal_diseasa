@@ -1,6 +1,6 @@
 import torch
 import typing
-from detectron2.engine import DefaultPredictor
+from detectron2_main.engine import DefaultPredictor
 from semantic_seg.model import PDSEG
 import cv2
 from PIL import Image
@@ -8,7 +8,7 @@ from matplotlib import pyplot as plt
 import os
 import numpy as np
 import logging
-from backbone import add_tridentnet_config
+from det import add_tridentnet_config
 
 class InferenceRoseDisease:
     def __init__(self,
@@ -49,7 +49,7 @@ class InferenceRoseDisease:
         self.mask_threshold = mask_threshold
         
         # delopy the object detection model.
-        from detectron2.config import get_cfg
+        from detectron2_main.config import get_cfg
         cfg = get_cfg()
         cfg.set_new_allowed(True)
         add_tridentnet_config(cfg)

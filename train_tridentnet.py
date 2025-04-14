@@ -9,21 +9,21 @@ This script is a simplified version of the training script in detectron2/tools.
 
 import os
 
-from detectron2.checkpoint import DetectionCheckpointer
-from detectron2.config import get_cfg
-from detectron2.engine import DefaultTrainer, default_argument_parser,\
+from detectron2_main.checkpoint import DetectionCheckpointer
+from detectron2_main.config import get_cfg
+from detectron2_main.engine import DefaultTrainer, default_argument_parser,\
                                 default_setup, launch
-from detectron2.evaluation import COCOEvaluator
-from backbone import add_tridentnet_config
-import detectron2.utils.comm as comm
-from detectron2.checkpoint import DetectionCheckpointer
-from detectron2.config import get_cfg
-from detectron2.data import MetadataCatalog, build_detection_test_loader, build_detection_train_loader
-from detectron2.engine import DefaultTrainer, default_argument_parser, default_setup, hooks, launch
-from detectron2.modeling import GeneralizedRCNNWithTTA
-from detectron2.modeling.meta_arch.build import build_model
+from detectron2_main.evaluation import COCOEvaluator
+from det import add_tridentnet_config
+import detectron2_main.utils.comm as comm
+from detectron2_main.checkpoint import DetectionCheckpointer
+from detectron2_main.config import get_cfg
+from detectron2_main.data import MetadataCatalog, build_detection_test_loader, build_detection_train_loader
+from detectron2_main.engine import DefaultTrainer, default_argument_parser, default_setup, hooks, launch
+from detectron2_main.modeling import GeneralizedRCNNWithTTA
+from detectron2_main.modeling.meta_arch.build import build_model
 from utils.run.convet_data import register_qk_dataset
-from detectron2.evaluation import COCOEvaluator
+from detectron2_main.evaluation import COCOEvaluator
 
 
 
@@ -67,12 +67,18 @@ def main(args):
 
 
 
-def invoke_main() -> None:
+def invoke_main(img_dir=r"D:\2025\data\obj_seg\petals_dataset_2024-09_for_seg", 
+                cfg_file=r"configs\Base-TridentNet-Fast-C4.yaml", 
+                task_label='disease') -> None:
+    if task_label == 'petal':
+        register_qk_dataset(img_dir)
+    elif task_label == 'disease':
+        register_qk_dataset(img_dir, label='disease')
     parser = default_argument_parser()
     args = parser.parse_args()
     # Set default config file path if not specified
     if not args.config_file:
-        args.config_file = r"configs\Base-TridentNet-Fast-C4.yaml"
+        args.config_file = cfg_file
     print("Command Line Args:", args)
     launch(
         main,

@@ -105,7 +105,7 @@ if __name__ == '__main__':
     
     os.makedirs(args.save_path, exist_ok=True)
     json_files = [os.path.join(args.json_path, f) for f in os.listdir(args.json_path) if f.endswith('.json')]
-    img_files = [os.path.join(args.json_path, f"{os.path.basename(f).split('.')[0]}.png") for f in json_files]
+    img_files = [os.path.join(args.json_path, f"{os.path.basename(f).split('.')[0]}.jpg") for f in json_files]
 
     if args.maskorimg == 'mask':
         assert len(img_files) == len(json_files), f'Number of images {len(img_files)} and JSON files {len(json_files)} must be the same'

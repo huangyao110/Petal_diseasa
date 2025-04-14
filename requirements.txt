@@ -1,0 +1,35 @@
+# Core dependencies
+torch>=1.8.0
+torchvision>=0.9.0
+fvcore>=0.1.5
+iopath>=0.1.7
+pycocotools>=2.0.2
+timm>=0.4.12
+
+# Detectron2 dependencies
+numpy>=1.19.5
+Pillow>=8.1.0
+termcolor>=1.1.0
+yacs>=0.1.8
+tabulate>=0.8.9
+cloudpickle>=1.6.0
+matplotlib>=3.3.4
+tqdm>=4.59.0
+future>=0.18.2
+scipy>=1.6.0
+omegaconf>=2.1.0
+hydra-core>=1.1.0
+
+# Segmentation models
+segmentation-models-pytorch>=0.2.0
+pytorch-lightning>=1.5.0
+albumentations>=1.0.0
+
+# GUI
+PyQt5>=5.15.0
+
+# Image processing
+opencv-python>=4.5.0
+
+# Utilities
+ipdb>=0.13.0

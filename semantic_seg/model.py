@@ -1,19 +1,11 @@
 import torch
 import pytorch_lightning as pl
 import os
-import cv2
 import torch
-import numpy as np
-import matplotlib.pyplot as plt
-from torch.utils.data import DataLoader
-from torch.utils.data import Dataset as BaseDataset
 from torch.optim import lr_scheduler
 import segmentation_models_pytorch as smp
 import pytorch_lightning as pl
 
-from semi_labe.mapper import get_training_augmentation, get_validation_augmentation
-from semi_labe.dataloader import Dataset
-from semantic_seg.fpn import FPN
 from segmentation_models_pytorch.decoders.unet import Unet 
 from segmentation_models_pytorch.decoders.unetplusplus import UnetPlusPlus
 
@@ -28,6 +20,8 @@ class PDSEG(pl.LightningModule):
                 out_classes, 
                 T_MAX, 
                 encoder_weights, 
+                pretrained_model_path=None,
+                freeze_layers = None,
                 **kwargs):
         super().__init__()
         # self.model = FPN.FPN(
@@ -66,6 +60,22 @@ class PDSEG(pl.LightningModule):
                 in_channels = in_channels,
                 classes = out_classes,
             )
+        elif decoder_name == 'deeplabv3':
+            self.model = smp.DeepLabV3(
+                encoder_name = encoder_name,
+                encoder_depth = 5,
+                encoder_weights = encoder_weights,  
+                in_channels = in_channels,
+                classes = out_classes,
+            )
+        elif decoder_name == 'manet':
+            self.model = smp.MAnet(
+                encoder_name = encoder_name,
+                encoder_depth = 5,
+                encoder_weights = encoder_weights,
+                in_channels = in_channels,
+                classes = out_classes,
+            )
         # preprocessing parameteres for image
         params = smp.encoders.get_preprocessing_params(encoder_name=encoder_name)
         self.T_MAX = T_MAX
@@ -76,11 +86,37 @@ class PDSEG(pl.LightningModule):
         self.loss_fn = smp.losses.DiceLoss(smp.losses.BINARY_MODE, from_logits=True)
         
         # initialize step metics
+        if pretrained_model_path is not None:
+            self._load_pretrained_model(pretrained_model_path)
+        if freeze_layers is not None:
+            assert type(freeze_layers) in [str, list], "freeze_layers must be a list or str."
+            self.freeze(freeze_layers)
 
         self.training_step_outputs = []
         self.validation_step_outputs = []
         self.test_step_outputs = []
-        
+
+    def _load_pretrained_model(self, pretrained_model_path):
+        """加载预训练模型"""
+        if os.path.exists(pretrained_model_path):
+            checkpoint = torch.load(pretrained_model_path)
+            # 使用strict=False允许加载部分权重
+            self.load_state_dict(checkpoint['state_dict'], strict=False)
+        else:
+            raise FileNotFoundError(f"预训练模型文件 {pretrained_model_path} 不存在")
+
+    
+    def freeze(self, which_freeze: str) -> None:
+        """
+        冻结模型的某些层
+        :param which_freeze: 要冻结的层的名称或索引
+        """
+        for i in which_freeze:
+            assert hasattr(self.model, i), f"模型中没有名为 {i} 的层"
+            assert i in ['encoder', 'decoder', 'segmentation_head'], f"模型中没有名为 {i} 的层"
+            layer = getattr(self.model, i)
+            for param in layer.parameters():
+                param.requires_grad = False
 
     def forward(self, image):
         # normalize image here
@@ -195,7 +231,8 @@ class PDSEG(pl.LightningModule):
         return 
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=2e-4)
+        optimizer = torch.optim.Adam(self.parameters(), lr=1e-5, 
+                                     weight_decay=1e-5)
         scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.T_MAX, eta_min=1e-5)
         return {
             'optimizer': optimizer,

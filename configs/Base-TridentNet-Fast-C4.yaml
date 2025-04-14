@@ -16,13 +16,13 @@ MODEL:
     BRANCH_DILATIONS: [1, 2, 3]
     TEST_BRANCH_IDX: 1
     TRIDENT_STAGE: "res4"
-  WEIGHTS: "./logs/step_obj_dect/model_final.pth" 
+  WEIGHTS: logs\step_obj_dect_disease\model_final.pth
 DATASETS:
   TRAIN: ("qk_dataset_train",)
   TEST: ("qk_dataset_val",)
 GLOBAL:
   HACK: 1.0
-OUTPUT_DIR: ./logs/step_obj_dect/
+OUTPUT_DIR: ./logs/step_obj_dect_disease/
 SEED: -1
 SOLVER:
   LR_SCHEDULER_NAME: "WarmupMultiStepLR"
@@ -34,7 +34,7 @@ SOLVER:
   NESTEROV: True
   GAMMA: 0.1
   # Save a checkpoint after every this number of iterations
-  CHECKPOINT_PERIOD: 10000
+  CHECKPOINT_PERIOD: 50000
   IMS_PER_BATCH: 3
   REFERENCE_WORLD_SIZE: 0
   CLIP_GRADIENTS: 

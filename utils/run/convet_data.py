@@ -3,15 +3,15 @@
 # register_coco_instances("my_dataset_train", {}, "json_annotation_train.json", "path/to/image/dir")
 # register_coco_instances("my_dataset_val", {}, "json_annotation_val.json", "path/to/image/dir")
 
-from detectron2.structures import BoxMode
+from detectron2_main.structures import BoxMode
 import os
 import json
 import numpy as np
-from detectron2 import model_zoo
-from detectron2.engine import DefaultPredictor
-from detectron2.config import get_cfg
-from detectron2.utils.visualizer import Visualizer
-from detectron2.data import MetadataCatalog, DatasetCatalog
+from detectron2_main import model_zoo
+from detectron2_main.engine import DefaultPredictor
+from detectron2_main.config import get_cfg
+from detectron2_main.utils.visualizer import Visualizer
+from detectron2_main.data import MetadataCatalog, DatasetCatalog
 import shutil
 import logging
 
@@ -68,7 +68,19 @@ def split_qk_jk(img_dir: str, out_dir: str):
             logger.error(f"An error occurred when moving the {img} to {dst_train}: {e}")
             continue
 
-def get_qk_dicts(img_dir):
+def mask_to_box(points):
+    """
+    将多边形mask点集转换为bounding box
+    Args:
+        points: 多边形点集列表，格式为[[x1,y1],[x2,y2],...]
+    Returns:
+        list: [min_x, min_y, max_x, max_y]
+    """
+    x_coords = [p[0] for p in points]
+    y_coords = [p[1] for p in points]
+    return [min(x_coords), min(y_coords), max(x_coords), max(y_coords)]
+
+def get_qk_dicts(img_dir, label=None):
     dataset_dicts = []
     try:
         for idx, v in enumerate(os.listdir(img_dir)):
@@ -94,12 +106,17 @@ def get_qk_dicts(img_dir):
                     objs = []
                     for _, anno in enumerate(annos):
                         pxy = anno["points"]
-                        px, py = [], []
-                        for x, y in pxy:
-                            px.append(x)
-                            py.append(y)
+                        if len(pxy) > 4 and anno['label'] == label:
+                            pxy = mask_to_box(pxy)
+                        elif len(pxy) == 4:
+                            px, py = [], []
+                            px, py = zip(*pxy)
+                            pxy = [np.min(px), np.min(py), np.max(px), np.max(py)]
+                        else:
+                            logger.warning(f"Invalid number of points: {len(pxy)}")
+                            continue
                         obj = {
-                            "bbox": [np.min(px), np.min(py), np.max(px), np.max(py)],
+                            "bbox": pxy,
                             "bbox_mode": BoxMode.XYXY_ABS,
                             "category_id": 0,
                         }
@@ -118,12 +135,13 @@ def get_qk_dicts(img_dir):
 # 确保在调用函数之前设置好日志级别和格式
 logging.basicConfig(level=logging.INFO)
 
-def register_qk_dataset(img_dir):
+def register_qk_dataset(img_dir, label=None):
+    thing_classes = ['petal'] if label is None else [label]
     for d in ["train", "val"]:
-        DatasetCatalog.register("qk_dataset_" + d, lambda d=d: get_qk_dicts(os.path.join(img_dir, d)))
-        MetadataCatalog.get("qk_dataset_" + d).set(thing_classes=["petal"])
+        DatasetCatalog.register("qk_dataset_" + d, 
+        lambda d=d: get_qk_dicts(os.path.join(img_dir, d),label=label))
+        MetadataCatalog.get("qk_dataset_" + d).set(thing_classes=thing_classes)
         MetadataCatalog.get("qk_dataset_" + d).set(evaluator_type="coco")
 
-img_dir = r"D:\2025\data\obj_dectetion\data_path_for_obj_dect"
-register_qk_dataset(img_dir)
+
 # qk_data_metadata = MetadataCatalog.get('qk_dataset_train')

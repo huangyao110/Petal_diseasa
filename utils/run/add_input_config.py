@@ -1,4 +1,4 @@
-from detectron2.config import CfgNode as CN
+from detectron2_main.config import CfgNode as CN
 
 def add_aug_config(cfg):
     """

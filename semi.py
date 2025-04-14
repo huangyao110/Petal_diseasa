@@ -6,9 +6,9 @@ import cv2
 import numpy as np
 
 from semi_labe.pre2ann import main_pred 
-from detectron2.engine import DefaultPredictor
+from detectron2_main.engine import DefaultPredictor
 
-from backbone import add_tridentnet_config
+from det import add_tridentnet_config
 
 class semi(object):
     def __init__(self, 
@@ -18,6 +18,7 @@ class semi(object):
                  cfg=None,
                  model=None,
                  encoder_name=None,
+                 decoder_name=None,
                  weights_file=None):
         self.shape_type = shape_type
         assert shape_type in ['box', 'mask'], '...'
@@ -30,7 +31,12 @@ class semi(object):
             if model is None or encoder_name is None or weights_file is None:
                 raise ValueError("model, encoder_name and weights_file must be provided when shape_type is 'mask'")
             weights = torch.load(weights_file)
-            model = model(encoder_name=encoder_name, in_channels=3, out_classes=1)
+            model = model(encoder_name=encoder_name, 
+                        decoder_name=decoder_name,
+                        encoder_weights='imagenet',
+                        T_MAX=2, 
+                        in_channels=3, 
+                        out_classes=1)
             self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
             model.load_state_dict(weights['state_dict'])
             self.model = model.to(self.device)
@@ -91,6 +97,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Run semi-supervised labeling')
     parser.add_argument('--encoder', type=str, default=None, required=False,
                         help='Encoder name for the model')
+    parser.add_argument('--decoder', type=str, default=None, required=False,
+                        help='Decoder name for the model')
     parser.add_argument('--weights', type=str, required=False,
                         default=r'logs\step_obj_dect\model_final.pth',
                         help='Path to model weights file')
@@ -113,7 +121,7 @@ if __name__ == '__main__':
     
     
     if args.shape_type =='box':
-        from detectron2.config import get_cfg
+        from detectron2_main.config import get_cfg
         cfg = get_cfg()
         cfg.set_new_allowed(True)
         add_tridentnet_config(cfg)
@@ -126,6 +134,13 @@ if __name__ == '__main__':
         
     elif args.shape_type =='mask':
         model = PDSEG
-        semi_model = semi(args.img_dir, args.shape_type, args.label, model, args.encoder, args.weights)
+        semi_model = semi(
+            img_dir = args.img_dir, 
+            shape_type=args.shape_type, 
+            label= args.label, 
+            model = model, 
+            encoder_name = args.encoder, 
+            decoder_name = args.decoder,
+            weights_file=args.weights)
         
     semi_model.mask2json(args.save_dir) 

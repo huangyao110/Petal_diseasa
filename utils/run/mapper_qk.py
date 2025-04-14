@@ -5,13 +5,13 @@ import numpy as np
 from typing import List, Optional, Union
 import torch
 
-from detectron2.config import configurable
+from detectron2_main.config import configurable
 
-from detectron2.config import configurable
-from detectron2.data import detection_utils as utils
-from detectron2.data import transforms as T
+from detectron2_main.config import configurable
+from detectron2_main.data import detection_utils as utils
+from detectron2_main.data import transforms as T
 # from detectron2.projects.point_rend import ColorAugSSDTransform
-from detectron2.structures import BitMasks, Instances, polygons_to_bitmask
+from detectron2_main.structures import BitMasks, Instances, polygons_to_bitmask
 
 """
 This file contains the default mapping that's applied to "dataset dicts".
