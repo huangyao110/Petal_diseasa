@@ -23,6 +23,21 @@
 
 *The main interface shows image loading, analysis control, and result preview functions.*
 
+## 📥 Download & Models
+
+You can download the packaged executable software (PetalSpot) and pre-trained model weights from Google Drive. This is the easiest way to get started without setting up a Python environment.
+
+- **Google Drive Link**: [Download PetalSpot & Models](https://drive.google.com/open?id=16qvfvMt3wYPZVF5-S2SGeXUEf53NvpSc&usp=drive_fs)
+
+The download package includes:
+- `PetalSpot.exe`: The main application executable.
+- `configs/`: Contains the configuration files and pre-trained model weights:
+    - `step1_tridenet_obj_dect.pth` (Object Detection)
+    - `step2_model_regnetx032d_pan.ckpt` (Petal Segmentation)
+    - `step3_model_se_regnety064d_pan.ckpt` (Disease Segmentation)
+
+> **Note for Developers**: If you are running the source code from this repository (`app.py`), you still need to download the model weights from the link above and place them in the `configs/model/` directory (or update the path in "System Settings").
+
 ## 🧠 Model Architecture
 
 This project adopts a cascaded deep learning processing flow:
@@ -31,51 +46,3 @@ This project adopts a cascaded deep learning processing flow:
 
 ![Model Architecture](pic/model.png)
 
-## 🛠️ Installation & Usage
-
-### Requirements
-- Python 3.8+
-- PyTorch (GPU version recommended)
-- PyQt5
-- OpenCV
-- Detectron2 (Included in the project or needs separate installation)
-
-### Installation
-Ensure the following core dependencies are installed:
-```bash
-pip install torch torchvision
-pip install opencv-python
-pip install PyQt5
-pip install pyyaml
-# Other project-specific dependencies...
-```
-
-### Usage
-Run `app.py` in the project root directory to start the application:
-
-```bash
-python app.py
-```
-
-## 📂 Directory Structure
-
-```
-f:\2025\Petal_diseasa-master\
-├── app.py              # Application entry point (GUI main program)
-├── configs/            # Model and application configuration files
-├── det/                # TridentNet related detection code
-├── detectron2/         # Detectron2 core library
-├── pic/                # Documentation image resources
-│   ├── model.png       # Model architecture diagram
-│   └── software.png    # Software screenshot
-├── utils/              # Utility scripts (e.g., inference class InferenceRoseDisease)
-└── readme.md           # Project documentation
-```
-
-## 📝 Configuration
-The system supports customizing model paths and display colors via the interface or configuration files:
-- **Model Configuration**: Modify model weight paths and threshold parameters in the "System Settings" tab.
-- **Display Configuration**: Customize the display color and transparency of petal and disease masks.
-
----
-*PetalSpot Pro - Empowering Smart Agriculture and Plant Disease Research*
