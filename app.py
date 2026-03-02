@@ -185,14 +185,21 @@ class ProcessingWorker(QThread):
     finished = pyqtSignal(list)
     error = pyqtSignal(str)
     
-    def __init__(self, infer_instance, colors, file_path=None, directory=None):
+    def __init__(self, infer_instance, colors, file_path=None, directory=None, output_dir=None):
         super().__init__()
         self.infer = infer_instance
         self.colors = colors
         self.file_path = file_path
         self.directory = directory
+        self.output_dir = output_dir
         self.batch_mode = bool(directory)
-        self.result_folder = RESULTS_DIR
+        
+        # Use user-selected output directory or default
+        if self.output_dir and os.path.exists(self.output_dir):
+            self.result_folder = self.output_dir
+        else:
+            self.result_folder = RESULTS_DIR
+            
         os.makedirs(self.result_folder, exist_ok=True)
     
     def run(self):
@@ -213,24 +220,32 @@ class ProcessingWorker(QThread):
         except:
             return -1
 
-    def _process_single_file(self):
-        """Single image processing logic"""
-        filename = os.path.basename(self.file_path)
+    def _process_core_logic(self, img_path, save_root_dir, is_batch=False):
+        """
+        Refactored core logic for processing a single image.
+        Returns a tuple: (list of result dicts, summary dict for batch)
+        """
+        filename = os.path.basename(img_path)
         base_name = os.path.splitext(filename)[0]
-        result_dir = os.path.join(self.result_folder, base_name)
+        
+        # If in batch mode, create a subdirectory for each image
+        if is_batch:
+            result_dir = os.path.join(save_root_dir, base_name)
+        else:
+            result_dir = os.path.join(save_root_dir, base_name)
+            
         os.makedirs(result_dir, exist_ok=True)
         
         # 1. Cropping
-        self.update_progress.emit(10)
-        self.infer.step1_crop_img(img_file=self.file_path, save_dir=result_dir)
+        self.infer.step1_crop_img(img_file=img_path, save_dir=result_dir)
         
-        # 2. Load Bounding Boxes (for real area calculation)
+        # 2. Load Bounding Boxes
         boxes_path = os.path.join(result_dir, f"{base_name}_boxes_info.npy")
         try:
             all_boxes = np.load(boxes_path)
         except:
-            logging.warning("boxes_info.npy not found")
-            return []
+            logging.warning(f"boxes_info.npy not found for {filename}")
+            return [], None
         
         # 3. Get cropped images and sort them
         crops = [f for f in os.listdir(result_dir) if f.lower().endswith('.jpg')]
@@ -245,15 +260,18 @@ class ProcessingWorker(QThread):
         results_data = []
         limit = min(len(crops), len(all_boxes))
         
+        total_p_area = 0
+        total_d_area = 0
+        
         for i in range(limit):
             img_file = crops[i]
             box = all_boxes[i].astype(int) # [x1, y1, x2, y2]
-            img_path = os.path.join(result_dir, img_file)
+            crop_path = os.path.join(result_dir, img_file)
             crop_base = os.path.splitext(img_file)[0]
             
             # 4. Segmentation inference
-            self.infer.step2_seg_petal(img_file=img_path, save_dir=petal_dir)
-            self.infer.step3_seg_disease(img_file=img_path, save_dir=disease_dir)
+            self.infer.step2_seg_petal(img_file=crop_path, save_dir=petal_dir)
+            self.infer.step3_seg_disease(img_file=crop_path, save_dir=disease_dir)
             
             p_mask_path = os.path.join(petal_dir, f"{crop_base}_petal_mask.png")
             d_mask_path = os.path.join(disease_dir, f"{crop_base}_disease_mask.png")
@@ -262,33 +280,28 @@ class ProcessingWorker(QThread):
                 pm = cv2.imread(p_mask_path, cv2.IMREAD_GRAYSCALE)
                 dm = cv2.imread(d_mask_path, cv2.IMREAD_GRAYSCALE)
                 
-                # ========================================================
-                # Core fix: Real area calculation logic
-                # ========================================================
-                # 1. Calculate real pixel area of the object's bounding box in original image
+                # Real area calculation
                 real_width = abs(box[2] - box[0])
                 real_height = abs(box[3] - box[1])
                 real_box_area = real_width * real_height
                 
-                # 2. Get total mask pixels (model output size, e.g., 512x512)
                 mask_total_pixels = pm.shape[0] * pm.shape[1]
                 
-                # 3. Calculate ratios
                 petal_ratio = np.count_nonzero(pm) / mask_total_pixels
                 disease_ratio_in_mask = np.count_nonzero(dm) / mask_total_pixels
                 
-                # 4. Map back to real area
                 p_area = int(petal_ratio * real_box_area)
                 d_area = int(disease_ratio_in_mask * real_box_area)
                 
-                # 5. Calculate disease percentage
                 ratio = (d_area / p_area * 100) if p_area > 0 else 0
-                # ========================================================
+                
+                total_p_area += p_area
+                total_d_area += d_area
                 
                 results_data.append({
                     'box': box,
                     'id': self._extract_id_from_filename(img_file),
-                    'image_path': img_path,
+                    'image_path': crop_path,
                     'petal_mask_path': p_mask_path,
                     'disease_mask_path': d_mask_path,
                     'disease_ratio': ratio,
@@ -297,20 +310,35 @@ class ProcessingWorker(QThread):
                     'source_image': filename,
                     'result_dir': result_dir
                 })
-            
-            # Update progress
-            current_prog = 10 + int(80 * (i + 1) / limit)
-            self.update_progress.emit(current_prog)
-
-        # 5. Generate CSV and annotated images
-        self._save_csv(results_data, os.path.join(result_dir, f"{base_name}_disease_report.csv"))
-        self._create_annotated_image(self.file_path, results_data, result_dir, base_name)
         
+        # Generate Annotated Image and CSV for this file
+        self._save_csv(results_data, os.path.join(result_dir, f"{base_name}_disease_report.csv"))
+        self._create_annotated_image(img_path, results_data, result_dir, base_name)
+        
+        # Create summary for batch
+        batch_summary = None
+        if is_batch:
+            batch_ratio = (total_d_area / total_p_area * 100) if total_p_area > 0 else 0
+            batch_summary = {
+                'image': filename,
+                'crops_count': len(crops),
+                'disease_ratio': batch_ratio,
+                'petal_area': total_p_area,
+                'disease_area': total_d_area,
+                'batch_result_dir': save_root_dir
+            }
+            
+        return results_data, batch_summary
+
+    def _process_single_file(self):
+        """Single image processing logic"""
+        self.update_progress.emit(10)
+        results, _ = self._process_core_logic(self.file_path, self.result_folder, is_batch=False)
         self.update_progress.emit(100)
-        return results_data
+        return results
 
     def _process_batch(self):
-        """Batch processing complete logic"""
+        """Batch processing complete logic - Optimized"""
         image_files = [f for f in os.listdir(self.directory) 
                        if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
         if not image_files:
@@ -324,66 +352,20 @@ class ProcessingWorker(QThread):
         total_files = len(image_files)
         
         for idx, img_file in enumerate(image_files):
+            if self.isInterruptionRequested():
+                break
+                
             img_path = os.path.join(self.directory, img_file)
-            # Reuse core logic of single file processing, adapted for batch structure
-            # For clarity, simplified calls are shown here
             
-            sub_res_dir = os.path.join(batch_dir, os.path.splitext(img_file)[0])
-            os.makedirs(sub_res_dir, exist_ok=True)
-            
-            # Cropping
-            self.infer.step1_crop_img(img_file=img_path, save_dir=sub_res_dir)
-            
-            # Statistics
-            crops = [f for f in os.listdir(sub_res_dir) if f.lower().endswith('.jpg')]
             try:
-                boxes = np.load(os.path.join(sub_res_dir, f"{os.path.splitext(img_file)[0]}_boxes_info.npy"))
-            except:
-                boxes = []
-                
-            total_p_area = 0
-            total_d_area = 0
-            
-            petal_dir = os.path.join(sub_res_dir, 'petal_seg')
-            disease_dir = os.path.join(sub_res_dir, 'petal_disease')
-            os.makedirs(petal_dir, exist_ok=True)
-            os.makedirs(disease_dir, exist_ok=True)
-            
-            # Process each flower
-            for k, crop_img in enumerate(crops):
-                if k >= len(boxes): break
-                box = boxes[k]
-                c_path = os.path.join(sub_res_dir, crop_img)
-                self.infer.step2_seg_petal(c_path, petal_dir)
-                self.infer.step3_seg_disease(c_path, disease_dir)
-                
-                # Simple area calculation (same as above)
-                c_base = os.path.splitext(crop_img)[0]
-                pp = os.path.join(petal_dir, f"{c_base}_petal_mask.png")
-                dp = os.path.join(disease_dir, f"{c_base}_disease_mask.png")
-                
-                if os.path.exists(pp) and os.path.exists(dp):
-                    pm = cv2.imread(pp, cv2.IMREAD_GRAYSCALE)
-                    dm = cv2.imread(dp, cv2.IMREAD_GRAYSCALE)
-                    
-                    real_area = abs(box[2]-box[0]) * abs(box[3]-box[1])
-                    mask_size = pm.shape[0] * pm.shape[1]
-                    
-                    pa = int((np.count_nonzero(pm)/mask_size) * real_area)
-                    da = int((np.count_nonzero(dm)/mask_size) * real_area)
-                    
-                    total_p_area += pa
-                    total_d_area += da
-            
-            ratio = (total_d_area / total_p_area * 100) if total_p_area > 0 else 0
-            summary_results.append({
-                'image': img_file,
-                'crops_count': len(crops),
-                'disease_ratio': ratio,
-                'petal_area': total_p_area,
-                'disease_area': total_d_area,
-                'batch_result_dir': batch_dir
-            })
+                # Call shared logic
+                _, summary = self._process_core_logic(img_path, batch_dir, is_batch=True)
+                if summary:
+                    summary_results.append(summary)
+            except Exception as e:
+                logging.error(f"Failed to process {img_file}: {e}")
+                # Continue to next file instead of crashing
+                continue
             
             self.update_progress.emit(int((idx+1)/total_files * 100))
             
@@ -447,11 +429,12 @@ class ProcessingWorker(QThread):
 
 class HomeTab(QWidget):
     """Main operation interface: file selection, result display, view switching"""
-    start_processing_requested = pyqtSignal(str)
+    start_processing_requested = pyqtSignal(str, str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.current_input_path = None
+        self.current_output_path = None
         self.is_batch_mode = False
         self._init_ui()
         self._init_logo()  # New method for bottom-left logo
@@ -517,17 +500,34 @@ class HomeTab(QWidget):
         btn_dir.setIcon(QApplication.style().standardIcon(QApplication.style().SP_DirIcon))
         btn_dir.clicked.connect(self._select_dir)
         
+        gb_layout.addWidget(self.lbl_path)
+        gb_layout.addWidget(btn_img)
+        gb_layout.addWidget(btn_dir)
+        
+        # --- Output Selection ---
+        gb_output = QGroupBox("Output Selection")
+        gb_out_layout = QVBoxLayout(gb_output)
+        
+        self.lbl_out_path = QLabel("Default: demo folder")
+        self.lbl_out_path.setWordWrap(True)
+        self.lbl_out_path.setStyleSheet("color: #666; font-style: italic;")
+        
+        btn_out = QPushButton(" Select Output Folder")
+        btn_out.setIcon(QApplication.style().standardIcon(QApplication.style().SP_DirIcon))
+        btn_out.clicked.connect(self._select_output_dir)
+        
+        gb_out_layout.addWidget(self.lbl_out_path)
+        gb_out_layout.addWidget(btn_out)
+        
+        left_layout.addWidget(gb_input)
+        left_layout.addWidget(gb_output)
+        
         btn_run = QPushButton(" Start Analysis")
         btn_run.setObjectName("processBtn") # For QSS styling
         btn_run.setIcon(QApplication.style().standardIcon(QApplication.style().SP_MediaPlay))
         btn_run.clicked.connect(self._run_process)
         
-        gb_layout.addWidget(self.lbl_path)
-        gb_layout.addWidget(btn_img)
-        gb_layout.addWidget(btn_dir)
-        gb_layout.addWidget(btn_run)
-        
-        left_layout.addWidget(gb_input)
+        left_layout.addWidget(btn_run)
         
         self.pbar = QProgressBar()
         self.pbar.setVisible(False)
@@ -604,12 +604,21 @@ class HomeTab(QWidget):
             self._reset_results()
             self.res_layout.addWidget(QLabel("Folder selected, click Start to begin batch processing..."))
 
+    def _select_output_dir(self):
+        d = QFileDialog.getExistingDirectory(self, "Select Output Folder")
+        if d:
+            self.current_output_path = d
+            self.lbl_out_path.setText(d)
+        else:
+            self.current_output_path = None
+            self.lbl_out_path.setText("Default: demo folder")
+
     def _run_process(self):
         if self.current_input_path:
             self.pbar.setValue(0)
             self.pbar.setVisible(True)
             self._reset_results()
-            self.start_processing_requested.emit(self.current_input_path)
+            self.start_processing_requested.emit(self.current_input_path, self.current_output_path or "")
         else:
             QMessageBox.warning(self, "Warning", "Please select an image or folder first")
 
@@ -848,7 +857,7 @@ class MainWindow(QMainWindow):
             logging.error(f"Model initialization failed: {e}")
             QMessageBox.critical(self, "Error", f"Model loading failed, please check configuration.\n{e}")
 
-    def _start_processing(self, path):
+    def _start_processing(self, path, output_path):
         """Start worker thread"""
         if not self.inference_engine:
             QMessageBox.warning(self, "Warning", "Model not initialized, cannot process.")
@@ -858,7 +867,8 @@ class MainWindow(QMainWindow):
             self.inference_engine, 
             self.config_mgr.get_colors_config(),
             file_path=path if os.path.isfile(path) else None,
-            directory=path if os.path.isdir(path) else None
+            directory=path if os.path.isdir(path) else None,
+            output_dir=output_path if output_path else None
         )
         self.worker.update_progress.connect(self.home_tab.update_progress)
         self.worker.finished.connect(self.home_tab.display_results)
