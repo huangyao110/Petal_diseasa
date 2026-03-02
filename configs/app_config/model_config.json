@@ -1,0 +1,13 @@
+{
+    "cfg_file": "F:/2025/Petal_diseasa-master/configs/Base-TridentNet-Fast-C4.yaml",
+    "crop_weight": "F:/model_final.pth",
+    "petal_encoder_name": "timm-regnetx_032",
+    "petal_decoder_name": "pan",
+    "disease_encoder_name": "timm-regnety_064",
+    "disease_decoder_name": "pan",
+    "petal_weights_file": "C:/Users/16477/Desktop/PetalSpot/_internal/configs/weights_from_online/step2_model_regnetx032d_pan.ckpt",
+    "diease_weights_file": "C:/Users/16477/Desktop/PetalSpot/_internal/configs/weights_from_online/logs/EX-2025-05-07-timm-regnety_064-pan_ft_encoder/version_3/checkpoints/epoch=161-step=118422.ckpt",
+    "box_threshold": 0.4,
+    "mask_threshold": 0.05,
+    "device": "cuda:0"
+}
